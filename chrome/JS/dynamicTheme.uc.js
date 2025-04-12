@@ -83,7 +83,7 @@ const DynamicTheme = {
   // Main color update function
   updateThemeForCurrentTab(retryCount = 0) {
     // Prevent multiple parallel executions
-    if (this._updateInProgress) {
+    if (this._updateInProgress && this.html) {
       this.log("Update already in progress, skipping");
       return;
     }
@@ -342,10 +342,99 @@ const DynamicTheme = {
         return visualElementColor;
       }
 
-      // 6. Fallback to the improved findProminentColor function
+      // 6. Look for color in the favicon of the current tab
+      const faviconColor = this.extractColorFromFavicon();
+      if (faviconColor) {
+        this.log("Found color from favicon:", faviconColor);
+        return faviconColor;
+      }
+
+      // 7. Fallback to the improved findProminentColor function
       return this.findProminentColor(contentDocument, hostname);
     } catch (e) {
       console.error("[DynamicTheme] Error extracting color:", e);
+      return null;
+    }
+  },
+
+  // Extract color from the current tab's favicon
+  extractColorFromFavicon() {
+    this.log("Extracting color from favicon");
+    try {
+      // Get the favicon element from the current tab
+      const tabIcon = document.querySelector(
+        `tab[selected="true"] .tab-icon-image, tab[selected="true"] html\\:img.tab-icon-image`,
+      );
+
+      if (!tabIcon || tabIcon.hidden || tabIcon.naturalHeight === 0) {
+        this.log("No favicon found or favicon is hidden");
+        return null;
+      }
+
+      // Create a canvas to draw the favicon
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      const size = Math.max(tabIcon.naturalWidth, tabIcon.naturalHeight, 16);
+
+      canvas.width = size;
+      canvas.height = size;
+
+      // Draw the favicon onto the canvas
+      ctx.drawImage(tabIcon, 0, 0, size, size);
+
+      // Get the image data
+      try {
+        const imageData = ctx.getImageData(0, 0, size, size).data;
+
+        // Create a color map to find the most prominent color
+        const colorMap = new Map();
+
+        // Process each pixel
+        for (let i = 0; i < imageData.length; i += 4) {
+          const r = imageData[i];
+          const g = imageData[i + 1];
+          const b = imageData[i + 2];
+          const a = imageData[i + 3];
+
+          // Skip transparent pixels
+          if (a < 127) continue;
+
+          // Skip white/black pixels
+          if ((r > 240 && g > 240 && b > 240) || (r < 15 && g < 15 && b < 15))
+            continue;
+
+          // Create a hex representation
+          const hex = `#${r.toString(16).padStart(2, "0")}${g
+            .toString(16)
+            .padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+
+          // Count occurrences
+          colorMap.set(hex, (colorMap.get(hex) || 0) + 1);
+        }
+
+        // Find the most common color
+        if (colorMap.size > 0) {
+          let mostCommonColor = null;
+          let highestCount = 0;
+
+          for (const [color, count] of colorMap.entries()) {
+            if (count > highestCount) {
+              mostCommonColor = color;
+              highestCount = count;
+            }
+          }
+
+          if (this.isUsableColor(mostCommonColor)) {
+            return mostCommonColor;
+          }
+        }
+      } catch (e) {
+        this.log("Error processing favicon image data:", e);
+      }
+      this.log("No usable color found in favicon");
+      return null;
+    } catch (e) {
+      this.log("Error extracting favicon color:", e);
       return null;
     }
   },
@@ -913,7 +1002,9 @@ const DynamicTheme = {
         }
 
         if (color && this.isUsableColor(color)) {
-          this.log(`Found usable color ${color} from general visual element`);
+          this.log(
+            `Found usable color ${color} from general visual element of type ${el.tagName}`,
+          );
           return color;
         }
       }
