@@ -11,9 +11,9 @@
     }
   }
 
+  // send HTML of the content document to the main process
   function sendHTML() {
     try {
-      // Use content.document instead of document
       if (content && content.document) {
         let html = content.document.documentElement.outerHTML;
         dump(
