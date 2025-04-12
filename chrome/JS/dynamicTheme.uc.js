@@ -1633,9 +1633,6 @@ const DynamicTheme = {
       #urlbar-background {
         background-color: ${color} !important;
       }
-      #navigator-toolbox {
-        --lwt-accent-color: ${color} !important;
-      }
       .tabbrowser-tab[selected="true"] {
         color: white !important;
       }
