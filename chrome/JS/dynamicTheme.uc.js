@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name           Dynamic Theme
-// @description    Changes Firefox UI colors based on the current website
+// @description    Changes Zen UI colors based on the current website
 // ==/UserScript==
 
 const DynamicTheme = {
   // Configuration
   DEBUG: true,
   COLOR_MEMORY: new Map(), // Cache colors by domain
-  DEFAULT_COLOR: " #000000", // Firefox's default dark theme color
+  DEFAULT_COLOR: " #000000", // Zen's default dark theme color
   MINIMUM_CONTRAST_RATIO: 4.5, // For text readability
   MAX_RETRIES: 5, // Maximum number of extraction attempts
 
@@ -26,7 +26,7 @@ const DynamicTheme = {
       this.updateThemeForCurrentTab();
     });
 
-    // More reliable page loading detection
+    // Page/Tab load listener
     gBrowser.addTabsProgressListener({
       onStateChange: (
         browser,
@@ -48,7 +48,7 @@ const DynamicTheme = {
               clearTimeout(this._pendingTimer);
             }
 
-            // Set a short delay to let DOM settle
+            // Short delay to let DOM settle
             this._pendingTimer = setTimeout(() => {
               this.updateThemeForCurrentTab();
               this._pendingTimer = null;
@@ -80,69 +80,7 @@ const DynamicTheme = {
     }
   },
 
-  retryFindHTMLRecursiveUpdateThemeForCurrentTab(retryCount) {
-    if (retryCount < this.MAX_RETRIES) {
-      this.log(
-        "No content document yet, retrying soon retry nb",
-        retryCount.toString(),
-        "retryFindHTMLRecursiveUpdateThemeForCurrentTab",
-      );
-      setTimeout(() => this.updateThemeForCurrentTab(retryCount + 1), 200);
-    }
-    return;
-  },
-
-  injectFrameScript() {
-    let self = this;
-
-    // Clear any existing HTML before requesting new
-    this.html = null;
-
-    if (window.messageManager && window.messageManager.loadFrameScript) {
-      let uri = "chrome://frame-scripts/content/dynamicTheme_frameScript.js";
-      window.messageManager.loadFrameScript(uri, true);
-      self.log("Frame script injected: dynamicTheme_frameScript.js");
-    } else {
-      console.error("Message manager not available; cannot load frame script.");
-      return null;
-    }
-
-    // Add a one-time message listener to catch the HTML sent back by the frame script
-    this.currentBrowser.messageManager.addMessageListener(
-      "DynamicTheme:ContentHTML",
-      function listener(msg) {
-        self.html = msg.data.html;
-        self.log(
-          "Active tab HTML retrieved:",
-          self.html ? "HTML received" : "No HTML received",
-        );
-
-        // Remove this listener so it runs only once per event
-        self.currentBrowser.messageManager.removeMessageListener(
-          "DynamicTheme:ContentHTML",
-          listener,
-        );
-
-        // Process the HTML directly here
-        if (self.html) {
-          const url = self.currentBrowser.currentURI.spec;
-          const hostname = new URL(url).hostname;
-          const color = self.extractColorFromPage(self.html, hostname);
-
-          if (color) {
-            self.COLOR_MEMORY.set(hostname, color);
-            self.applyColor(color);
-          } else {
-            self.log("No usable color found, using default");
-            self.applyColor(self.DEFAULT_COLOR);
-          }
-        }
-      },
-    );
-    return null;
-  },
-
-  // Main update function
+  // Main color update function
   updateThemeForCurrentTab(retryCount = 0) {
     // Prevent multiple parallel executions
     if (this._updateInProgress) {
@@ -165,7 +103,7 @@ const DynamicTheme = {
 
       const url = this.currentBrowser.currentURI.spec;
 
-      // Skips
+      // Skips non-supported URLs
       if (!url.startsWith("http") && !url.startsWith("https")) {
         this.log("Skipping non-supported URL:", url, "SkippingNonSupportedURL");
         this.DEBUG = false;
@@ -176,16 +114,16 @@ const DynamicTheme = {
 
       const hostname = new URL(url).hostname;
 
-      // // First check if we have a cached color for this domain
-      // if (this.COLOR_MEMORY.has(hostname)) {
-      //   this.log(
-      //     `Using cached color for ${hostname}:`,
-      //     this.COLOR_MEMORY.get(hostname),
-      //   );
-      //   this.applyColor(this.COLOR_MEMORY.get(hostname));
-      //   this._updateInProgress = false;
-      //   return;
-      // }
+      // First check if we have a cached color for this domain (disabled for development)
+      if (this.COLOR_MEMORY.has(hostname)) {
+        this.log(
+          `Using cached color for ${hostname}:`,
+          this.COLOR_MEMORY.get(hostname),
+        );
+        this.applyColor(this.COLOR_MEMORY.get(hostname));
+        this._updateInProgress = false;
+        return;
+      }
 
       // Try the hardcoded color
       const knownColor = this.getKnownSiteColor(hostname);
@@ -226,7 +164,7 @@ const DynamicTheme = {
           self.html ? "HTML received" : "No HTML received",
         );
 
-        // Remove this listener to prevent duplicates
+        // Remove the listener to prevent duplicates
         self.currentBrowser.messageManager.removeMessageListener(
           "DynamicTheme:ContentHTML",
           messageListener,
@@ -267,13 +205,13 @@ const DynamicTheme = {
         }
       };
 
-      // Add listener before injecting script
+      // Add listener
       this.currentBrowser.messageManager.addMessageListener(
         "DynamicTheme:ContentHTML",
         messageListener,
       );
 
-      // Now inject frame script
+      // Inject frame script
       if (window.messageManager && window.messageManager.loadFrameScript) {
         let uri = "chrome://frame-scripts/content/dynamicTheme_frameScript.js";
         window.messageManager.loadFrameScript(uri, true);
@@ -396,11 +334,12 @@ const DynamicTheme = {
         return frameworkColor;
       }
 
-      // 5. Look for color in SVG elements (logos)
-      const svgColor = this.extractSVGColors(contentDocument);
-      if (svgColor) {
-        this.log("Found color from SVG:", svgColor);
-        return svgColor;
+      // 5. Look for color in SVG elements and images (logos and brand elements)
+      const visualElementColor =
+        this.extractVisualElementColors(contentDocument);
+      if (visualElementColor) {
+        this.log("Found color from visual elements:", visualElementColor);
+        return visualElementColor;
       }
 
       // 6. Fallback to the improved findProminentColor function
@@ -686,73 +625,607 @@ const DynamicTheme = {
     }
   },
 
-  // Extract colors from SVG elements
-  extractSVGColors(document) {
+  // Extract colors from SVG elements and images
+  extractVisualElementColors(document) {
     try {
-      // Find SVGs that might be logos
-      const svgs = document.querySelectorAll("svg");
-      const potentialLogoSVGs = [];
+      // Storage for potential brand elements and their colors
+      const foundElements = [];
+      const processedElements = new Set(); // To avoid duplicates
 
+      // STEP 1: Find all visual elements that could contain brand colors
+      const svgs = Array.from(document.querySelectorAll("svg"));
+      const images = Array.from(document.querySelectorAll("img"));
+      const icons = Array.from(
+        document.querySelectorAll(
+          "i[class*='icon'], i[class*='fa'], span[class*='icon']",
+        ),
+      );
+
+      // STEP 2: First pass - look for explicit logo indicators
+      const logoKeywords = [
+        "logo",
+        "brand",
+        "emblem",
+        "symbol",
+        "badge",
+        "mark",
+      ];
+
+      // Function to check if element is likely a logo or brand element
+      const isLikelyBrandElement = (el) => {
+        if (!el) return false;
+
+        // Check element's own attributes
+        if (
+          el.id &&
+          logoKeywords.some((kw) => el.id.toLowerCase().includes(kw))
+        )
+          return true;
+        if (
+          el.className &&
+          typeof el.className === "string" &&
+          logoKeywords.some((kw) => el.className.toLowerCase().includes(kw))
+        )
+          return true;
+        if (
+          el.alt &&
+          logoKeywords.some((kw) => el.alt.toLowerCase().includes(kw))
+        )
+          return true;
+        if (
+          el.src &&
+          logoKeywords.some((kw) => el.src.toLowerCase().includes(kw))
+        )
+          return true;
+
+        // Check parent element
+        if (el.parentElement) {
+          if (
+            el.parentElement.id &&
+            logoKeywords.some((kw) =>
+              el.parentElement.id.toLowerCase().includes(kw),
+            )
+          )
+            return true;
+          if (
+            el.parentElement.className &&
+            typeof el.parentElement.className === "string" &&
+            logoKeywords.some((kw) =>
+              el.parentElement.className.toLowerCase().includes(kw),
+            )
+          )
+            return true;
+        }
+
+        // Check if in typical header locations
+        if (
+          el.closest("header") ||
+          el.closest(".header") ||
+          el.closest("#header") ||
+          el.closest("nav") ||
+          el.closest(".nav") ||
+          el.closest("#nav") ||
+          el.closest(".logo-container") ||
+          el.closest("#logo-container") ||
+          el.closest(".brand") ||
+          el.closest("#brand")
+        ) {
+          return true;
+        }
+
+        return false;
+      };
+
+      // Process all SVGs first (since they're more likely to contain brand colors)
       for (const svg of svgs) {
-        // Skip very small or hidden SVGs
-        const width = parseInt(svg.getAttribute("width")) || 0;
-        const height = parseInt(svg.getAttribute("height")) || 0;
+        if (processedElements.has(svg)) continue;
 
-        // Check if this might be a logo (either has "logo" in class/id or is in a typical logo position)
-        const isLogo =
-          (svg.id && svg.id.toLowerCase().includes("logo")) ||
-          (svg.className &&
-            svg.className.toString().toLowerCase().includes("logo")) ||
-          (svg.parentElement &&
-            svg.parentElement.id &&
-            svg.parentElement.id.toLowerCase().includes("logo")) ||
-          (svg.parentElement.className &&
-            svg.parentElement.className
-              .toString()
-              .toLowerCase()
-              .includes("logo"));
+        // Score the likelihood this is a brand element (0-100)
+        let score = 0;
 
-        if (isLogo) {
-          potentialLogoSVGs.push(svg);
+        // Explicit logo/brand naming is highest priority
+        if (isLikelyBrandElement(svg)) {
+          score += 50;
+        }
+
+        // Position-based scoring
+        const rect = svg.getBoundingClientRect();
+
+        // Too small to be meaningful?
+        if (rect.width < 10 || rect.height < 10) continue;
+
+        // Positioned at top of page? (likely in header)
+        if (rect.top < 200) score += 20;
+
+        // Left side of page? (common logo position)
+        if (rect.left < 200) score += 10;
+
+        // Is it reasonable logo size?
+        if (
+          rect.width > 20 &&
+          rect.width < 300 &&
+          rect.height > 20 &&
+          rect.height < 200
+        )
+          score += 10;
+
+        // Add to our collection with score
+        foundElements.push({
+          element: svg,
+          score: score,
+          type: "svg",
+        });
+
+        processedElements.add(svg);
+      }
+
+      // Next process images
+      for (const img of images) {
+        if (processedElements.has(img)) continue;
+
+        // Skip very small or invisible images
+        const rect = img.getBoundingClientRect();
+        if (rect.width < 10 || rect.height < 10) continue;
+
+        // Skip likely decoration images
+        if (
+          img.src &&
+          img.src.includes("data:image/svg+xml") &&
+          rect.width < 24 &&
+          rect.height < 24
+        )
+          continue;
+
+        let score = 0;
+
+        // Explicit logo/brand naming
+        if (isLikelyBrandElement(img)) {
+          score += 50;
+        }
+
+        // Position-based scoring
+        if (rect.top < 200) score += 20; // Likely in header
+        if (rect.left < 200) score += 10; // Common logo position
+
+        // Is it reasonable logo size?
+        if (
+          rect.width > 20 &&
+          rect.width < 300 &&
+          rect.height > 20 &&
+          rect.height < 200
+        )
+          score += 10;
+
+        // Add to collection
+        foundElements.push({
+          element: img,
+          score: score,
+          type: "img",
+        });
+
+        processedElements.add(img);
+      }
+
+      // Process potential icon elements (Font Awesome, Material icons, etc.)
+      for (const icon of icons) {
+        if (processedElements.has(icon)) continue;
+
+        // Skip invisible icons
+        const rect = icon.getBoundingClientRect();
+        if (rect.width < 5 || rect.height < 5) continue;
+
+        let score = 0;
+
+        // Icons in header/nav areas are good candidates
+        if (isLikelyBrandElement(icon)) {
+          score += 30;
+        }
+
+        // Position scoring
+        if (rect.top < 200) score += 10;
+
+        // Add to collection
+        foundElements.push({
+          element: icon,
+          score: score,
+          type: "icon",
+        });
+
+        processedElements.add(icon);
+      }
+
+      // STEP 3: Sort elements by score (highest first) and position (top to bottom, left to right)
+      foundElements.sort((a, b) => {
+        // If scores differ significantly, use score
+        if (Math.abs(a.score - b.score) > 10) {
+          return b.score - a.score;
+        }
+
+        // Otherwise, use position (top elements first)
+        const rectA = a.element.getBoundingClientRect();
+        const rectB = b.element.getBoundingClientRect();
+
+        // Prioritize top position first
+        if (Math.abs(rectA.top - rectB.top) > 20) {
+          return rectA.top - rectB.top;
+        }
+
+        // Then left position
+        return rectA.left - rectB.left;
+      });
+
+      // STEP 4: Analyze top-ranked elements (take up to 10 to ensure we have enough candidates)
+      const topElements = foundElements.slice(0, 10);
+      this.log(
+        `Found ${topElements.length} potential brand elements to analyze`,
+      );
+
+      // STEP 5: Process each element based on its type
+      for (const { element, type } of topElements) {
+        let color = null;
+
+        if (type === "svg") {
+          color = this.extractColorFromSVG(element);
+        } else if (type === "img") {
+          // For images, check inline styles or background colors of parent containers
+          color = this.extractColorFromImgElement(element);
+        } else if (type === "icon") {
+          color = this.extractColorFromIconElement(element);
+        }
+
+        if (color && this.isUsableColor(color)) {
+          this.log(`Found usable brand color ${color} from ${type} element`);
+          return color;
         }
       }
 
-      // Process potential logo SVGs
-      for (const svg of potentialLogoSVGs) {
-        // Check the SVG itself for a fill attribute
-        if (svg.hasAttribute("fill") && svg.getAttribute("fill") !== "none") {
-          const fillColor = this.normalizeColor(svg.getAttribute("fill"));
-          if (this.isUsableColor(fillColor)) {
-            return fillColor;
+      // If we couldn't find a color from top elements, try common header/navigation areas
+      const headerElements = [
+        document.querySelector("header"),
+        document.querySelector(".header"),
+        document.querySelector("#header"),
+        document.querySelector("nav"),
+        document.querySelector(".nav"),
+        document.querySelector("#nav"),
+        document.querySelector(".navbar"),
+        document.querySelector(".top-bar"),
+        document.querySelector(".hero"),
+        document.querySelector(".banner"),
+      ].filter((el) => el !== null);
+
+      for (const el of headerElements) {
+        const color = this.extractBackgroundColor(el);
+        if (color && this.isUsableColor(color)) {
+          this.log(`Found usable color ${color} from header/nav element`);
+          return color;
+        }
+      }
+
+      // If all else fails, look for first five visual elements anywhere in the page
+      const allVisualElements = [...svgs, ...images].slice(0, 5);
+      for (const el of allVisualElements) {
+        let color = null;
+
+        if (el.tagName.toLowerCase() === "svg") {
+          color = this.extractColorFromSVG(el);
+        } else {
+          color = this.extractColorFromImgElement(el);
+        }
+
+        if (color && this.isUsableColor(color)) {
+          this.log(`Found usable color ${color} from general visual element`);
+          return color;
+        }
+      }
+
+      return null;
+    } catch (e) {
+      this.log("Error extracting visual element colors:", e);
+      return null;
+    }
+  },
+
+  // Extract color from SVG element
+  extractColorFromSVG(svg) {
+    try {
+      // First check the SVG itself for fill or color attribute
+      if (svg.hasAttribute("fill") && svg.getAttribute("fill") !== "none") {
+        const fillColor = this.normalizeColor(svg.getAttribute("fill"));
+        if (this.isUsableColor(fillColor)) {
+          return fillColor;
+        }
+      }
+
+      if (svg.hasAttribute("color") && svg.getAttribute("color") !== "none") {
+        const colorAttr = this.normalizeColor(svg.getAttribute("color"));
+        if (this.isUsableColor(colorAttr)) {
+          return colorAttr;
+        }
+      }
+
+      // Check for inline style with fill or color
+      if (svg.hasAttribute("style")) {
+        const style = svg.getAttribute("style");
+        let fillMatch = style.match(
+          /fill:\s*(#[0-9a-f]{3,8}|rgb\(.*?\)|rgba\(.*?\))/i,
+        );
+        if (fillMatch && fillMatch[1]) {
+          const color = this.normalizeColor(fillMatch[1]);
+          if (this.isUsableColor(color)) {
+            return color;
           }
         }
 
-        // Check paths, circles, rects with fill attributes
-        const colorElements = svg.querySelectorAll(
-          "path[fill], circle[fill], rect[fill], polygon[fill]",
+        let colorMatch = style.match(
+          /color:\s*(#[0-9a-f]{3,8}|rgb\(.*?\)|rgba\(.*?\))/i,
         );
-        for (const el of colorElements) {
-          const fill = el.getAttribute("fill");
-          if (fill && fill !== "none" && fill !== "transparent") {
-            const color = this.normalizeColor(fill);
-            if (this.isUsableColor(color)) {
-              return color;
+        if (colorMatch && colorMatch[1]) {
+          const color = this.normalizeColor(colorMatch[1]);
+          if (this.isUsableColor(color)) {
+            return color;
+          }
+        }
+      }
+
+      // Check all SVG elements that might contain color
+      const colorElements = svg.querySelectorAll(
+        "path[fill], circle[fill], rect[fill], polygon[fill], line[fill], " +
+          "path[stroke], circle[stroke], rect[stroke], polygon[stroke], line[stroke]",
+      );
+
+      // Track found colors and their counts
+      const colorCounts = new Map();
+
+      for (const el of colorElements) {
+        // Check fill attribute
+        if (
+          el.hasAttribute("fill") &&
+          el.getAttribute("fill") !== "none" &&
+          el.getAttribute("fill") !== "transparent"
+        ) {
+          const fill = this.normalizeColor(el.getAttribute("fill"));
+          if (this.isUsableColor(fill)) {
+            colorCounts.set(fill, (colorCounts.get(fill) || 0) + 1);
+          }
+        }
+
+        // Check stroke attribute (less priority but still useful)
+        if (
+          el.hasAttribute("stroke") &&
+          el.getAttribute("stroke") !== "none" &&
+          el.getAttribute("stroke") !== "transparent"
+        ) {
+          const stroke = this.normalizeColor(el.getAttribute("stroke"));
+          if (this.isUsableColor(stroke)) {
+            colorCounts.set(stroke, (colorCounts.get(stroke) || 0) + 0.5); // Lower weight for stroke
+          }
+        }
+      }
+
+      // Find the most common color
+      if (colorCounts.size > 0) {
+        let mostCommonColor = null;
+        let highestCount = 0;
+
+        for (const [color, count] of colorCounts.entries()) {
+          if (count > highestCount) {
+            mostCommonColor = color;
+            highestCount = count;
+          }
+        }
+
+        return mostCommonColor;
+      }
+
+      // Look for style elements within the SVG
+      const styleElements = svg.querySelectorAll("style");
+      for (const style of styleElements) {
+        const cssText = style.textContent;
+        if (!cssText) continue;
+
+        // Look for fill colors in the CSS
+        const fillMatch = cssText.match(
+          /fill:\s*(#[0-9a-f]{3,8}|rgb\(.*?\)|rgba\(.*?\))/i,
+        );
+        if (fillMatch && fillMatch[1]) {
+          const color = this.normalizeColor(fillMatch[1]);
+          if (this.isUsableColor(color)) {
+            return color;
+          }
+        }
+      }
+
+      return null;
+    } catch (e) {
+      this.log("Error extracting SVG color:", e);
+      return null;
+    }
+  },
+
+  // Extract color from image element
+  extractColorFromImgElement(img) {
+    try {
+      // Check image element for inline style with border-color
+      if (img.hasAttribute("style")) {
+        const style = img.getAttribute("style");
+
+        // Check for border color
+        const borderColorMatch = style.match(
+          /border(-color)?:\s*(#[0-9a-f]{3,8}|rgb\(.*?\)|rgba\(.*?\))/i,
+        );
+        if (borderColorMatch && borderColorMatch[2]) {
+          const color = this.normalizeColor(borderColorMatch[2]);
+          if (this.isUsableColor(color)) {
+            return color;
+          }
+        }
+      }
+
+      // Check parent container for background color (common for logo containers)
+      let parent = img.parentElement;
+      for (let i = 0; i < 3 && parent; i++) {
+        // Check up to 3 levels up
+        const backgroundColor = this.extractBackgroundColor(parent);
+        if (backgroundColor && this.isUsableColor(backgroundColor)) {
+          return backgroundColor;
+        }
+        parent = parent.parentElement;
+      }
+
+      // Check for color in image URL (sometimes logos have color names in filenames)
+      if (img.src) {
+        const colorNames = [
+          { name: "blue", color: "#1a73e8" },
+          { name: "red", color: "#ea4335" },
+          { name: "green", color: "#34a853" },
+          { name: "yellow", color: "#fbbc05" },
+          { name: "purple", color: "#673ab7" },
+          { name: "pink", color: "#e91e63" },
+          { name: "orange", color: "#ff9800" },
+          { name: "teal", color: "#009688" },
+        ];
+
+        for (const { name, color } of colorNames) {
+          if (img.src.toLowerCase().includes(name)) {
+            return color;
+          }
+        }
+      }
+
+      return null;
+    } catch (e) {
+      this.log("Error extracting image color:", e);
+      return null;
+    }
+  },
+
+  // Extract color from icon element (Font Awesome, Material Icons, etc.)
+  extractColorFromIconElement(icon) {
+    try {
+      // First check for computed color
+      let color = window.getComputedStyle(icon).color;
+      if (color && color !== "rgb(0, 0, 0)" && color !== "rgba(0, 0, 0, 0)") {
+        color = this.normalizeColor(color);
+        if (this.isUsableColor(color)) {
+          return color;
+        }
+      }
+
+      // Check for inline style
+      if (icon.hasAttribute("style")) {
+        const style = icon.getAttribute("style");
+        const colorMatch = style.match(
+          /color:\s*(#[0-9a-f]{3,8}|rgb\(.*?\)|rgba\(.*?\))/i,
+        );
+        if (colorMatch && colorMatch[1]) {
+          color = this.normalizeColor(colorMatch[1]);
+          if (this.isUsableColor(color)) {
+            return color;
+          }
+        }
+      }
+
+      // Check for class names that might indicate color
+      if (icon.className) {
+        const classList = icon.className.toString().split(/\s+/);
+        for (const className of classList) {
+          // Many icon libraries use patterns like "text-blue-500" or "color-primary"
+          if (
+            /text-(blue|red|green|yellow|purple|pink|indigo|teal|orange)-[4-7]00/.test(
+              className,
+            )
+          ) {
+            const colorParts = className.match(
+              /text-(blue|red|green|yellow|purple|pink|indigo|teal|orange)-([4-7]00)/,
+            );
+            if (colorParts && colorParts[1]) {
+              // Map color names to hex values (approximate Tailwind colors)
+              const colorMap = {
+                blue: "#3B82F6",
+                red: "#EF4444",
+                green: "#22C55E",
+                yellow: "#EAB308",
+                purple: "#A855F7",
+                pink: "#EC4899",
+                indigo: "#6366F1",
+                teal: "#14B8A6",
+                orange: "#F97316",
+              };
+
+              if (colorMap[colorParts[1]]) {
+                return colorMap[colorParts[1]];
+              }
+            }
+          }
+
+          // Check for "text-primary", "color-primary", etc.
+          if (
+            /text-primary|color-primary|primary-text|primary-color/.test(
+              className,
+            )
+          ) {
+            // Try to get the computed style (browser might apply a color)
+            const computedColor = window.getComputedStyle(icon).color;
+            if (computedColor && computedColor !== "rgb(0, 0, 0)") {
+              const color = this.normalizeColor(computedColor);
+              if (this.isUsableColor(color)) {
+                return color;
+              }
             }
           }
         }
+      }
 
-        // Look for style elements within the SVG
-        const styleElements = svg.querySelectorAll("style");
-        for (const style of styleElements) {
-          const cssText = style.textContent;
-          if (!cssText) continue;
+      return null;
+    } catch (e) {
+      this.log("Error extracting icon color:", e);
+      return null;
+    }
+  },
 
-          // Look for fill colors in the CSS
-          const fillMatch = cssText.match(
-            /fill:\s*(#[0-9a-f]{3,8}|rgb\(.*?\)|rgba\(.*?\))/i,
+  // Extract background color from any element
+  extractBackgroundColor(element) {
+    if (!element) return null;
+
+    try {
+      // Check for inline style with background color
+      if (element.hasAttribute("style")) {
+        const style = element.getAttribute("style");
+        const bgMatch = style.match(
+          /background(-color)?:\s*(#[0-9a-f]{3,8}|rgb\(.*?\)|rgba\(.*?\))/i,
+        );
+        if (bgMatch && bgMatch[2]) {
+          const color = this.normalizeColor(bgMatch[2]);
+          if (this.isUsableColor(color)) {
+            return color;
+          }
+        }
+      }
+
+      // Check computed style
+      const computedBg = window.getComputedStyle(element).backgroundColor;
+      if (
+        computedBg &&
+        computedBg !== "rgba(0, 0, 0, 0)" &&
+        computedBg !== "transparent"
+      ) {
+        const color = this.normalizeColor(computedBg);
+        if (this.isUsableColor(color)) {
+          return color;
+        }
+      }
+
+      // Check for background gradient
+      if (element.hasAttribute("style")) {
+        const style = element.getAttribute("style");
+        const bgImage = style.match(/background(-image)?:\s*(.*?)(?:;|$)/i);
+        if (bgImage && bgImage[2] && bgImage[2].includes("gradient")) {
+          const gradientColors = bgImage[2].match(
+            /#[0-9a-f]{3,8}|rgb\([^)]+\)|rgba\([^)]+\)/gi,
           );
-          if (fillMatch && fillMatch[1]) {
-            const color = this.normalizeColor(fillMatch[1]);
+          if (gradientColors && gradientColors.length > 0) {
+            // Use the first color from the gradient
+            const color = this.normalizeColor(gradientColors[0]);
             if (this.isUsableColor(color)) {
               return color;
             }
@@ -762,7 +1235,7 @@ const DynamicTheme = {
 
       return null;
     } catch (e) {
-      this.log("Error extracting SVG colors:", e);
+      this.log("Error extracting background color:", e);
       return null;
     }
   },
@@ -1022,7 +1495,7 @@ const DynamicTheme = {
         return sortedColors[0][0];
       }
 
-      // As a last resort, check the body background
+      // As a last resort, we check the body background
       try {
         const bodyBg = this.normalizeColor(doc.body.style.backgroundColor);
         if (this.isUsableColor(bodyBg)) {
@@ -1040,7 +1513,7 @@ const DynamicTheme = {
     }
   },
 
-  // Apply color to Firefox UI elements
+  // Apply color to Zen UI elements
   applyColor(color) {
     if (!color) color = this.DEFAULT_COLOR;
 
