@@ -767,7 +767,7 @@ const DynamicTheme = {
     }
   },
 
-  // Improved prominent color finder
+  // Find Prominent Color in elements like headers, navbars, etc.
   findProminentColor(doc, hostname) {
     try {
       // Priority elements to check (in order of importance)
