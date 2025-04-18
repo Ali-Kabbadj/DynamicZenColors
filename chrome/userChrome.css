@@ -1,0 +1,219 @@
+/* DynamicThemeExention */
+
+.DynamicThemeExentionButtonImage {
+  list-style-image: url("resources/DynamicThemeExentionButtonImage.png");
+}
+
+.DynamicThemeExentionMenuContainer {
+  display: flex;
+  flex-direction: column;
+  width: 600px;
+  height: 900px;
+  position: absolute;
+  right: 100px;
+  top: 50px;
+  border-radius: 24px;
+  background: rgba(40, 40, 40, 0.7);
+  backdrop-filter: blur(15px);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  align-items: center;
+  justify-content: start;
+}
+
+.DynamicThemeExentionHeader {
+  font-size: 30px;
+}
+
+.DynamicThemeExentionMenuContainerHidden {
+  display: none;
+}
+
+.settingContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  justify-content: start;
+  width: 400px;
+}
+
+.setting {
+  display: grid;
+  justify-self: end;
+}
+
+.settingsRow {
+  font-size: 20px;
+  padding-top: 20px;
+  width: inherit;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: 1fr auto;
+}
+
+.label {
+  height: 30px;
+}
+
+/*  use cached colors */
+
+.checkbox {
+  opacity: 0;
+  cursor: pointer;
+}
+
+.CheckboxSkin {
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.CheckboxContainer > * {
+  grid-area: 1/1;
+}
+
+.CheckboxContainer {
+  display: grid;
+  width: 90px;
+  height: 30px;
+  border-radius: 45px;
+}
+
+.CheckboxCheckedSkin.CheckboxSkin {
+  background: no-repeat center url("resources/themeOnButtonBackground.jpg");
+}
+
+.CheckboxUncheckedSkin.CheckboxSkin {
+  background: no-repeat center url("resources/themeOffButtonBackground.jpg");
+  --mask: radial-gradient(
+    circle at 15px 15px,
+    rgba(0, 0, 0, 0) 10px,
+    rgba(0, 0, 0, 1) 10px
+  );
+  mask-image: var(--mask);
+  -webkit-mask-image: var(--mask);
+}
+
+.checkbox:checked ~ .CheckboxUncheckedSkin.CheckboxSkin {
+  --mask: radial-gradient(
+    circle at 75px 15px,
+    rgba(0, 0, 0, 1) 10px,
+    rgba(0, 0, 0, 0) 10px
+  );
+  mask-image: var(--mask);
+  -webkit-mask-image: var(--mask);
+}
+/*  use cached colors */
+
+/* sliders */
+
+.contrastSlider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 5px;
+  background: #00000082;
+  outline: none;
+  opacity: 0.7;
+  -webkit-transition: 0.2s;
+  transition: opacity 0.2s;
+  border-radius: 10px;
+}
+
+.contrastSlider:hover {
+  opacity: 1;
+}
+
+.contrastSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 25px;
+  height: 25px;
+  background: #04aa6d;
+  cursor: pointer;
+}
+
+.contrastSlider::-moz-range-thumb {
+  width: 25px;
+  height: 25px;
+  background: no-repeat center url("resources/contrast.png");
+  cursor: pointer;
+  background-color: white;
+  border-radius: 50%;
+}
+
+/* sliders */
+
+.extentionEnabled[disabled] {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.extentionEnabled {
+  width: 400px;
+}
+
+.settingSectionHeader {
+  font-size: 28px;
+  padding-top: 30px;
+}
+
+.singleSettingLabel {
+  font-size: 28px;
+}
+
+.contrastSection {
+  padding-left: 20px;
+}
+
+.advancedSestion {
+  padding-left: 20px;
+}
+
+/* color picker */
+
+.wrap {
+  min-height: 100vh;
+  max-width: 720px;
+  background-color: red;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+}
+
+.wrap .pickerContainer {
+  width: 50%;
+  padding: 32px 0;
+}
+
+.pickerContainer {
+  position: absolute;
+  bottom: -43px;
+  right: -30px;
+}
+
+.pickerContainerHidden {
+  display: none;
+}
+
+.hexInputContainer {
+  display: flex;
+  width: 190px;
+  height: 30px;
+  border-radius: 45px;
+}
+
+#colorPickerTrigger {
+  width: 40px;
+  background-color: rgba(255, 0, 0, 0);
+}
+
+/* color picker */
+
+.CustomColorsComingSoon[disabled] {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+/* DynamicThemeExention */

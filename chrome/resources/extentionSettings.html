@@ -1,0 +1,150 @@
+<div
+  class="DynamicThemeExentionMenuContainer DynamicThemeExentionMenuContainerHidden"
+>
+  <div class="DynamicThemeExentionHeader">
+    <h1>Dynamic Theme</h1>
+  </div>
+  <div class="settingContainer">
+    <div class="settingsRow">
+      <div class="singleSettingLabel">
+        <label>Enabled</label>
+      </div>
+      <div class="setting">
+        <div class="CheckboxContainer">
+          <input class="checkbox" id="themeStateButton" type="checkbox" />
+          <div class="CheckboxSkin CheckboxCheckedSkin"></div>
+          <div class="CheckboxSkin CheckboxUncheckedSkin"></div>
+        </div>
+      </div>
+    </div>
+    <div class="extentionEnabled">
+      <div class="settingSectionHeader">
+        <label>Color Contrast</label>
+      </div>
+      <div class="contrastSection">
+        <div class="settingsRow">
+          <div class="label">
+            <label>Active Tabs</label>
+          </div>
+          <div class="setting">
+            <div class="sliderContainer">
+              <input
+                type="range"
+                min="0.1"
+                max="1"
+                value="0.5"
+                step="0.1"
+                id="contrastSliderActive"
+                class="contrastSlider"
+              />
+            </div>
+          </div>
+        </div>
+        <div class="settingsRow">
+          <div class="label">
+            <label>Inactive Tabs</label>
+          </div>
+          <div class="setting">
+            <div class="sliderContainer">
+              <input
+                type="range"
+                min="0.1"
+                max="1"
+                value="0.5"
+                step="0.1"
+                id="contrastSliderInactive"
+                class="contrastSlider"
+              />
+            </div>
+          </div>
+        </div>
+        <div class="settingsRow">
+          <div class="label">
+            <label>Search bar</label>
+          </div>
+          <div class="setting">
+            <div class="sliderContainer">
+              <input
+                type="range"
+                min="0.1"
+                max="1"
+                value="0.5"
+                step="0.1"
+                id="contrastSliderSearchBar"
+                class="contrastSlider"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="settingSectionHeader">
+        <label>Advanced Settings</label>
+      </div>
+      <div class="advancedSestion">
+        <div class="settingsRow">
+          <div class="label">
+            <label>Cache Colors</label>
+          </div>
+          <div class="setting">
+            <div class="CheckboxContainer">
+              <input
+                class="checkbox"
+                id="cacheColorsCheckbox"
+                type="checkbox"
+              />
+              <div class="CheckboxSkin CheckboxCheckedSkin"></div>
+              <div class="CheckboxSkin CheckboxUncheckedSkin"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settingsRow CustomColorsComingSoon" disabled>
+          <div class="label">
+            <label>Custom Colors (Coming Soon)</label>
+          </div>
+          <div class="setting">
+            <div class="CheckboxContainer">
+              <input
+                class="checkbox"
+                id="customColorsCheckbox"
+                type="checkbox"
+              />
+              <div class="CheckboxSkin CheckboxCheckedSkin"></div>
+              <div class="CheckboxSkin CheckboxUncheckedSkin"></div>
+            </div>
+          </div>
+        </div>
+        <div class="settingsRow">
+          <div class="label">
+            <label>Enable Debuging</label>
+          </div>
+          <div class="setting">
+            <div class="CheckboxContainer">
+              <input
+                class="checkbox"
+                id="enableDebugingCheckbox"
+                type="checkbox"
+              />
+              <div class="CheckboxSkin CheckboxCheckedSkin"></div>
+              <div class="CheckboxSkin CheckboxUncheckedSkin"></div>
+            </div>
+          </div>
+        </div>
+        <div class="settingsRow">
+          <div class="label">
+            <label>Fallback color</label>
+          </div>
+          <div class="setting">
+            <div class="hexInputContainer">
+              <input id="hexInput" / >
+              <input type="button" id="colorPickerTrigger" />
+            </div>
+            <div class="pickerContainer pickerContainerHidden">
+              <div class="colorPicker"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
