@@ -157,9 +157,15 @@ const DynamicThemeExention = {
     themeStateButton.addEventListener("click", (event) => {
       const settingsSection = MainContainer.querySelector(".extentionEnabled");
       if (event.target.checked) {
+        this.CURRENT_CONFIG.enabled = true;
+        this.writeUserConfig(this.CURRENT_CONFIG);
+        DynamicTheme.updateUserConfigVars(this.CURRENT_CONFIG);
         DynamicTheme.addStyles();
         settingsSection.removeAttribute("disabled");
       } else {
+        this.CURRENT_CONFIG.enabled = false;
+        this.writeUserConfig(this.CURRENT_CONFIG);
+        DynamicTheme.updateUserConfigVars(this.CURRENT_CONFIG);
         DynamicTheme.removeStyles();
         settingsSection.setAttribute("disabled", "disabled");
       }
@@ -243,12 +249,13 @@ const DynamicThemeExention = {
 
     var colorPicker = new iro.ColorPicker(".colorPicker", {
       width: 280,
-      color: "rgb(255, 0, 0)",
+      color: this.CURRENT_CONFIG.defaultColor,
       borderWidth: 1,
       borderColor: "#fff",
     });
 
     var hexInput = MainContainer.querySelector("#hexInput");
+    hexInput.value = this.CURRENT_CONFIG.defaultColor;
     // "color:init", "color:change";
     colorPicker.on(["input:end"], (color) => {
       hexInput.value = color.hexString;
@@ -458,8 +465,7 @@ const DynamicThemeExention = {
     );
     this.CURRENT_CONFIG.defaultColor = hexColor;
     this.writeUserConfig(this.CURRENT_CONFIG);
-    DynamicTheme.updateUserConfigVars(this.CURRENT_CONFIG);
-    DynamicTheme.addStyles();
+    this.ApplyConfig();
   },
 
   ApplyConfig() {
@@ -467,7 +473,11 @@ const DynamicThemeExention = {
     if (this.CURRENT_CONFIG.enabled) {
       DynamicTheme.updateUserConfigVars(this.CURRENT_CONFIG);
       // DynamicTheme.removeStyles();
-      DynamicTheme.addStyles();
+      if (this.CURRENT_CONFIG.enabled) {
+        DynamicTheme.addStyles();
+      } else {
+        DynamicTheme.removeStyles();
+      }
     }
   },
 

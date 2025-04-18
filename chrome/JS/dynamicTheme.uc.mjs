@@ -16,6 +16,8 @@ export const DynamicTheme = {
   CONTRAST_ACTIVE: 0.45,
   CONTRAST_INACTIVE: 0.3,
   CONTRAST_SEARCHBAR: 0.45,
+  _retryScheduled: false,
+  _updateInProgress: false,
 
   currentBrowser: null,
   html: null,
@@ -81,18 +83,18 @@ export const DynamicTheme = {
           return;
         }
 
+        //attr.includes("selected")
         for (let attr of changedAttributes) {
           if (
-            (attr.includes("progress") ||
-              attr.includes("image") ||
-              attr.includes("busy") ||
+            (attr.includes("busy") ||
               attr.includes("progress") ||
+              attr.includes("image") ||
               attr.includes("selected")) &&
-            this.IS_ENABELED
+            this.IS_ENABELED &&
+            !attr.includes("visuallyselected")
           ) {
-            this.log("image changed in tab ", tab.linkedPanel);
-            this.updateThemeForCurrentTab(3, tab);
-            this._updateInProgress = false;
+            this.log("attribute changed in tab ", this.getTabURL(tab), attr);
+            this.updateThemeForCurrentTab(0, tab);
           }
         }
       },
@@ -100,8 +102,69 @@ export const DynamicTheme = {
     );
   },
 
-  // Main color update function
+  // init() {
+  //   gBrowser.tabContainer.addEventListener(
+  //     "TabAttrModified",
+  //     (event) => {
+  //       let tab = event.target;
+  //       this.currentBrowser = tab.linkedBrowser;
+  //       let changed = event.detail.changed; // Array of attr names
+  //       if (!tab || !this.IS_ENABLED) return;
+
+  //       // 1) Tab selected (only for the newly selected tab)
+  //       if (changed.includes("selected") && tab.selected) {
+  //         this.log("Tab selected:", tab.linkedPanel);
+  //         this.updateThemeForCurrentTab(0, tab);
+  //       }
+
+  //       // 2) Load finished (busy attribute removed)
+  //       if (changed.includes("busy") && !tab.busy) {
+  //         this.log("Tab load finished:", tab.linkedPanel);
+  //         this.updateThemeForCurrentTab(0, tab);
+  //       }
+
+  //       // 3) Favicon loaded
+  //       if (changed.includes("image")) {
+  //         this.log("Favicon changed:", tab.linkedPanel);
+  //         this.updateThemeForCurrentTab(0, tab);
+  //       }
+  //     },
+  //     false,
+  //   );
+  // },
+
+  getTabURL(tab) {
+    let browser = tab.linkedBrowser;
+
+    // Try contentWindow first
+    try {
+      let win = browser.contentWindow;
+      if (win && win.location && typeof win.location.href === "string") {
+        return win.location.href;
+      }
+    } catch (e) {
+      /* ignore cross‑process or not‑ready errors */
+    }
+
+    // Fallback to browsingContext
+    try {
+      let bc = browser.browsingContext;
+      let wgl = bc.currentWindowGlobal;
+      if (wgl && wgl.documentURI && typeof wgl.documentURI.spec === "string") {
+        return wgl.documentURI.spec;
+      }
+    } catch (e) {
+      /* ignore if BC isn’t ready */
+    }
+
+    // Last resort: docshell’s URI
+    return browser.currentURI && browser.currentURI.spec;
+  },
+
   updateThemeForCurrentTab(retryCount = 0, tab) {
+    if (!this.IS_ENABELED) {
+      return;
+    }
     // Prevent multiple parallel executions
     if (!tab) {
       this.log("tab is not availabel yet");
@@ -124,10 +187,11 @@ export const DynamicTheme = {
 
       // const url = this.currentBrowser.currentURI.spec;
 
-      let browserForTab = gBrowser.getBrowserForTab(tab);
+      // let browserForTab = gBrowser.getBrowserForTab(tab);
       let hostname = null;
       try {
-        hostname = browserForTab.currentURI.host;
+        // hostname = browserForTab.currentURI.host;
+        hostname = this.getTabURL(tab);
         if (!hostname) return;
       } catch (e) {
         this.log("could not get hostname, tab is inactive!", tab.linkedPanel);
@@ -137,6 +201,12 @@ export const DynamicTheme = {
 
       this.log("Working on hostname", hostname);
 
+      if (!hostname.includes("https") || !hostname.includes("http")) {
+        this.log("skinping unsuppored host");
+        this.applyColor(this.DEFAULT_COLOR, tab);
+        return;
+      }
+
       //first check user custom colors
       const customColor = this.getCustomSiteColor(hostname);
       if (this.USE_CUSTOM_COLORS && customColor) {
@@ -144,6 +214,7 @@ export const DynamicTheme = {
         // this.COLOR_MEMORY.set(hostname, knownColor);
         this.applyColor(customColor, tab);
         this._updateInProgress = false;
+        this._retryScheduled = false;
         return;
       }
 
@@ -154,6 +225,16 @@ export const DynamicTheme = {
           this.COLOR_MEMORY.get(hostname),
         );
         this.applyColor(this.COLOR_MEMORY.get(hostname), tab);
+        this._updateInProgress = false;
+        return;
+      }
+
+      //  Look for color in the favicon of the current tab
+      var faviconColor = this.extractColorFromFavicon(tab);
+      if (faviconColor != null) {
+        this.log("Found color from favicon:", faviconColor);
+        this.COLOR_MEMORY.set(hostname, faviconColor);
+        this.applyColor(faviconColor, tab);
         this._updateInProgress = false;
         return;
       }
@@ -206,6 +287,7 @@ export const DynamicTheme = {
 
         // If we couldn't extract a color, retry or apply default
         if (retryCount < self.MAX_RETRIES - 1) {
+          self._retryScheduled = true;
           self.log(
             `No color found yet, retrying (${retryCount + 1}/${
               self.MAX_RETRIES
@@ -215,8 +297,9 @@ export const DynamicTheme = {
           );
           setTimeout(() => {
             self._updateInProgress = false; // Release lock before retrying
-            self.updateThemeForCurrentTab(retryCount + 1);
-          }, 50);
+            self._retryScheduled = true;
+            self.updateThemeForCurrentTab(retryCount + 1, tab);
+          }, 100);
         } else {
           self.log(
             "Max retries exceeded, using default color, reason is we couldn't find a color",
@@ -225,6 +308,7 @@ export const DynamicTheme = {
           );
           self.applyColor(self.DEFAULT_COLOR, tab);
           self._updateInProgress = false;
+          self._retryScheduled = true;
         }
       };
 
@@ -251,42 +335,37 @@ export const DynamicTheme = {
             null,
             null,
           );
-          this._updateInProgresss = false;
+          this._updateInProgress = false;
           return;
         }
       }
 
       // Set a timeout in case we never get a message from the frame script
-      setTimeout(() => {
-        if (self._updateInProgress) {
-          if (retryCount < self.MAX_RETRIES - 1) {
-            self.log(
-              `No color found yet, retrying (${retryCount + 1}/${
-                self.MAX_RETRIES
-              })...`,
-              retryCount,
-              "retrying updateThemeForCurrentTab with timeout",
-            );
 
-            // Remove stale listener before retrying
-            self.currentBrowser.messageManager.removeMessageListener(
-              "DynamicTheme:ContentHTML",
-              messageListener,
-            );
+      if (self._updateInProgress && !self._retryScheduled) {
+        if (retryCount < self.MAX_RETRIES - 1) {
+          self._retryScheduled = true;
+          self.log(
+            `No color found yet, retrying (${retryCount + 1}/${
+              self.MAX_RETRIES
+            })...`,
+            retryCount,
+            "retrying updateThemeForCurrentTab with timeout",
+          );
 
-            self._updateInProgress = false; // Release lock before retrying
-            self.updateThemeForCurrentTab(retryCount + 1);
-          } else {
-            self.log(
-              "Max retries exceeded, using default color, reason is we couldn't find a color",
-              "",
-              "MaxRetriesExceeded",
-            );
-            self.applyColor(self.DEFAULT_COLOR, tab);
-            self._updateInProgress = false;
-          }
+          // Remove stale listener before retrying
+          self.currentBrowser.messageManager.removeMessageListener(
+            "DynamicTheme:ContentHTML",
+            messageListener,
+          );
+
+          self._updateInProgress = false; // Release lock before retrying
+          setTimeout(() => {
+            self._retryScheduled = false;
+            self.updateThemeForCurrentTab(retryCount + 1, tab);
+          }, 100);
         }
-      }, 50);
+      }
     } catch (e) {
       this.error("[DynamicTheme] Error updating theme:", null, e);
       this.applyColor(this.DEFAULT_COLOR, tab);
@@ -327,13 +406,6 @@ export const DynamicTheme = {
           this.log(`Found meta theme-color:`, color);
           return color;
         }
-      }
-
-      // 2. Look for color in the favicon of the current tab
-      const faviconColor = this.extractColorFromFavicon(tab);
-      if (faviconColor) {
-        this.log("Found color from favicon:", faviconColor);
-        return faviconColor;
       }
 
       // 3. Check for additional meta tags with theme colors
@@ -448,10 +520,12 @@ export const DynamicTheme = {
         // Find the most common color
         if (colorMap.size > 0) {
           let mostCommonColor = null;
+          let mostCommentColorSecond = null;
           let highestCount = 0;
 
           for (const [color, count] of colorMap.entries()) {
             if (count > highestCount) {
+              mostCommentColorSecond = mostCommonColor;
               mostCommonColor = color;
               highestCount = count;
             }
@@ -459,6 +533,9 @@ export const DynamicTheme = {
 
           if (this.isUsableColor(mostCommonColor)) {
             return mostCommonColor;
+          }
+          if (this.isUsableColor(mostCommentColorSecond)) {
+            return mostCommentColorSecond;
           }
         }
       } catch (e) {
@@ -1648,11 +1725,10 @@ export const DynamicTheme = {
   },
 
   addStyles() {
-    this.IS_ENABELED = true;
     const tabs = gBrowser.tabContainer.querySelectorAll(".tabbrowser-tab");
 
     for (const tab of tabs) {
-      this.updateThemeForCurrentTab(5, tab);
+      this.updateThemeForCurrentTab(0, tab);
       this._updateInProgress = false;
     }
   },
@@ -1702,12 +1778,6 @@ export const DynamicTheme = {
 
     `;
     }
-
-    this.log(tab.linkedPanel, "tab.linkedPanel [linkedPanel]");
-    this.log(
-      gBrowser.selectedTab.linkedPanel,
-      "selectedTab.linkedPanel [linkedPanel]",
-    );
 
     if (tab.linkedPanel === gBrowser.selectedTab.linkedPanel) {
       const dynamicStyleForBar =
@@ -1831,9 +1901,10 @@ export const DynamicTheme = {
 
   // Determine if a color is usable (not too light/dark/desaturated)
   isUsableColor(hex) {
-    if (!hex || hex === "#ffffff" || hex === "#000000") return false;
+    this.log("color from fav", hex);
+    // if (!hex || hex === "#ffffff" || hex === "#000000") return false;
 
-    // Convert hex to RGB
+    // // Convert hex to RGB
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);
     const b = parseInt(hex.slice(5, 7), 16);
@@ -1847,9 +1918,9 @@ export const DynamicTheme = {
     const delta = max - min;
     const saturation = max === 0 ? 0 : delta / max;
 
-    // Reject too light, too dark or too gray colors
+    // // Reject too light, too dark or too gray colors
     if (brightness < 30 || brightness > 225) return false;
-    if (saturation < 0.1) return false;
+    // if (saturation < 0.1) return false;
 
     return true;
   },
